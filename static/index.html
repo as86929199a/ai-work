@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>936 公車即時動態</title>
+
+    <link rel="stylesheet"
+          href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        header {
+            background: #263238;
+            color: white;
+            padding: 14px;
+            text-align: center;
+        }
+
+        h2 {
+            margin: 0 0 6px;
+        }
+
+        #status {
+            font-size: 14px;
+        }
+
+        #map {
+            width: 100%;
+            height: calc(100dvh - 82px);
+        }
+
+        .bus-marker {
+            background: #1976d2;
+            color: white;
+            border: 2px solid white;
+            border-radius: 8px;
+            padding: 5px 8px;
+            font-size: 12px;
+            font-weight: bold;
+            white-space: nowrap;
+            box-shadow: 0 2px 6px #0004;
+        }
+    </style>
+</head>
+
+<body>
+
+<header>
+    <h2>936 公車即時動態</h2>
+    <div id="status">正在載入公車資料...</div>
+</header>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+    const map = L.map("map").setView(
+        [25.075, 121.43],
+        12
+    );
+
+    L.tileLayer(
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        {
+            attribution: "&copy; OpenStreetMap contributors",
+            maxZoom: 19
+        }
+    ).addTo(map);
+
+    const busLayer = L.layerGroup().addTo(map);
+
+    const status = document.getElementById("status");
+
+    function escapeHTML(value) {
+        return String(value).replace(/[&<>"']/g, char => ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;"
+        })[char]);
+    }
+
+    async function updateBuses() {
+        try {
+            const response = await fetch("/api/buses");
+
+            if (!response.ok) {
+                throw new Error("HTTP " + response.status);
+            }
+
+            const buses = await response.json();
+
+            busLayer.clearLayers();
+
+            buses.forEach(bus => {
+                const lat = bus.BusPosition.PositionLat;
+                const lon = bus.BusPosition.PositionLon;
+
+                const plate = escapeHTML(
+                    bus.PlateNumb || "未知車牌"
+                );
+
+                const direction = bus.Direction === 0
+                    ? "去程"
+                    : bus.Direction === 1
+                        ? "返程"
+                        : "方向未知";
+
+                const icon = L.divIcon({
+                    className: "",
+                    html: `<div class="bus-marker">${plate}</div>`,
+                    iconSize: [90, 30],
+                    iconAnchor: [45, 15]
+                });
+
+                L.marker([lat, lon], { icon })
+                    .bindPopup(`
+                        <b>936 公車</b><br>
+                        車牌：${plate}<br>
+                        方向：${direction}<br>
+                        GPS：${escapeHTML(bus.GPSTime || "未知")}
+                    `)
+                    .addTo(busLayer);
+            });
+
+            status.textContent =
+                `目前顯示 ${buses.length} 輛公車｜每 30 秒更新`;
+
+        } catch (error) {
+            console.error(error);
+            status.textContent = "無法取得公車即時資料";
+        }
+    }
+
+    updateBuses();
+
+    setInterval(updateBuses, 30000);
+</script>
+
+</body>
+</html>
